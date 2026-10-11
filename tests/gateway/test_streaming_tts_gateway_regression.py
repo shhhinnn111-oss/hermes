@@ -114,8 +114,8 @@ def _setup_monkeypatches(monkeypatch, tmp_path):
         },
     )
 
-    from hermes_cli import tools_config
-    monkeypatch.setattr(tools_config, "_get_platform_tools", lambda user_config, platform_key: {"core"})
+    from tools import platform_policy
+    monkeypatch.setattr(platform_policy, "get_platform_tools", lambda user_config, platform_key, **kwargs: {"core"})
 
 
 def test_run_agent_voice_turn_no_name_error(monkeypatch, tmp_path):

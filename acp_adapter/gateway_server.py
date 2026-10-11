@@ -82,7 +82,7 @@ def _slash_command(text):
     name = stripped.split(None, 1)[0][1:]
     if not name or '/' in name:
         return None
-    from hermes_cli.commands import resolve_command
+    from commands import resolve_command
     command = resolve_command(name)
     return command.name if command is not None else None
 

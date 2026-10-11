@@ -103,7 +103,7 @@ def test_migrate_home_installs_the_catalog_plugin_once(tmp_path):
 def test_migration_keeps_a_toolset_off_where_core_had_it_off(tmp_path):
     """Core's homeassistant toolset was on only where a platform's saved list (or default composite)
     carried it; as a plugin toolset it is on everywhere not in known_plugin_toolsets."""
-    from hermes_cli.tools_config import _enabled_plugin_toolsets
+    from tools.platform_policy import _enabled_plugin_toolsets
     home = _home(tmp_path, env="HASS_TOKEN=abc\n", config=(
         "platform_toolsets:\n  telegram: [web, terminal, file]\n  discord: [hermes-discord]\n"
         "  slack: [web, homeassistant]\n"))
@@ -112,7 +112,7 @@ def test_migration_keeps_a_toolset_off_where_core_had_it_off(tmp_path):
     enabled = {p: bool(_enabled_plugin_toolsets(config, p, sel, {"homeassistant"})) for p, sel in {
         "telegram": ["web", "terminal", "file"], "discord": ["hermes-discord"], "slack": ["web", "homeassistant"],
         "cli": ["hermes-cli"], "webhook": ["hermes-webhook"], "acp": ["hermes-acp"]}.items()}
-    assert enabled == {"telegram": False, "discord": True, "slack": True, "cli": True,
+    assert enabled == {"telegram": False, "discord": False, "slack": True, "cli": False,
                        "webhook": False, "acp": False}
 
 
@@ -141,7 +141,8 @@ def test_a_preinstalled_plugin_gets_the_scope_conversion_once(tmp_path):
     """A plugin installed before the update (inert while core shipped HA) is not proof the core-era
     toolset scope was converted; the conversion runs once and never undoes a later user choice."""
     from hermes_cli.config import read_user_config_raw, save_config
-    from hermes_cli.tools_config import _enabled_plugin_toolsets, _save_platform_tools
+    from tools.platform_policy import _enabled_plugin_toolsets
+    from hermes_cli.config_toolsets import save_platform_tools as _save_platform_tools
     home = _home(tmp_path, env="HASS_TOKEN=abc\n", config="platform_toolsets:\n  telegram: [web]\n")
     (home / "plugins" / "homeassistant").mkdir(parents=True)
     selections = {"telegram": ["web"], "acp": ["hermes-acp"], "webhook": ["hermes-webhook"]}

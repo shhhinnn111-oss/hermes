@@ -218,7 +218,7 @@ policy; `client-local (cli_only)` commands are terminal/UI features of a client.
 
 def render() -> str:
     sys.path.insert(0, str(ROOT))
-    from hermes_cli.commands import COMMAND_REGISTRY
+    from commands import COMMAND_REGISTRY
     served = _served_methods()
     ink, specs = _ink_commands(), _desktop_specs()
     rows = ["| Command | Gateway (`slash.exec`) | Classic CLI | Ink | Desktop | ACP | Notes |",

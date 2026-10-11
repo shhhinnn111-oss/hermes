@@ -130,7 +130,7 @@ class TestSessionActiveDirectory:
 
 class TestInitRegistryWiring:
     def test_init_is_registered_and_resolves(self):
-        from hermes_cli.commands import resolve_command
+        from commands import resolve_command
 
         cmd = resolve_command("init")
         assert cmd is not None
@@ -139,7 +139,7 @@ class TestInitRegistryWiring:
 
     def test_init_works_on_the_gateway(self):
         # /init is a both-surfaces command like /learn, not CLI-only.
-        from hermes_cli.commands import GATEWAY_KNOWN_COMMANDS
+        from commands import GATEWAY_KNOWN_COMMANDS
 
         assert "init" in GATEWAY_KNOWN_COMMANDS
 

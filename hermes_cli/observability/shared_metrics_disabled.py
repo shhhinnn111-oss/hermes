@@ -178,7 +178,7 @@ def _toolset_transitions(old: dict, new: dict) -> Iterable[tuple[str, str, str]]
 
     if scope(old) == scope(new):
         return
-    from hermes_cli.tools_config import _configurable_keys, _get_platform_tools
+    from tools.platform_policy import configurable_toolset_keys as _configurable_keys, get_platform_tools as _get_platform_tools
 
     platforms = {"cli"}
     for config in (old, new):

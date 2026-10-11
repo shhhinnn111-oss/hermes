@@ -194,7 +194,7 @@ def _apply_launch_overrides(params, config):
 
 def _resolve_toolsets(params, config, source, safe_mode):
     """Validate explicit toolsets and return the session's enabled toolset set."""
-    from hermes_cli.tools_config import _get_platform_tools
+    from tools.platform_policy import get_platform_tools as _get_platform_tools
     from toolsets import validate_toolset
     explicit = params.get('toolsets')
     if 'toolsets' in params:
@@ -221,7 +221,7 @@ def _resolve_toolsets(params, config, source, safe_mode):
         enabled |= surface - (disabled - {'desktop_ui'})
     if safe_mode:
         # Plugin toolsets are user customizations; the safe worker never imports them.
-        from hermes_cli.tools_config import _get_plugin_toolset_keys
+        from tools.platform_policy import get_plugin_toolset_keys as _get_plugin_toolset_keys
         enabled -= _get_plugin_toolset_keys()
     return enabled
 

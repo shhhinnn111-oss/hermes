@@ -121,7 +121,7 @@ def _enabled_toolsets(platform: str) -> list[str]:
         from tui_gateway.server import _load_enabled_toolsets
         return list(_load_enabled_toolsets(platform) or [])
     from hermes_cli.config import load_config
-    from hermes_cli.tools_config import _get_platform_tools
+    from tools.platform_policy import get_platform_tools as _get_platform_tools
     return sorted(_get_platform_tools(load_config(), platform))
 
 

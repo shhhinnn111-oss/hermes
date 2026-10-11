@@ -164,7 +164,7 @@ async def forward(view, name, rest):
     except GatewayRPCError as exc:
         if str(exc) != "unsupported_command":
             raise
-        from hermes_cli.commands import resolve_command
+        from commands import resolve_command
         print(refusal(name) if resolve_command(name) else f"Unknown command: /{name} (use /help)")
         return
     if reply.get("type") == "skill":
@@ -183,7 +183,7 @@ _HANDLERS = {"title": _title, "undo": _undo, "retry": _retry, "new": _new, "clea
 
 async def run_command(view, command, rest):
     """Any slash command the view's own controls did not take."""
-    from hermes_cli.commands import resolve_command
+    from commands import resolve_command
     name = command.lstrip("/")
     definition = resolve_command(name)
     canonical = definition.name if definition else name

@@ -524,7 +524,7 @@ def test_settings_skills_plugins_transitions_only_count_moves_from_and_back_to_d
 
 
 def test_toolset_transitions_use_the_real_resolver():
-    from hermes_cli.tools_config import _get_platform_tools
+    from tools.platform_policy import get_platform_tools as _get_platform_tools
 
     default = sorted(_get_platform_tools({}, "cli", include_default_mcp_servers=False))
     assert "memory" in default

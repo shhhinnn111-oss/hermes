@@ -487,7 +487,7 @@ def _migrate_to_34(results: dict[str, Any], quiet: bool) -> None:
 def _migrate_to_38(results: dict[str, Any], quiet: bool) -> None:
     # 37 → 38: the bundled observability/nemo_relay plugin was removed (Relay lifecycle moved
     # into the agent core); drop it from plugins.enabled.
-    from hermes_cli.relay_plugin_cutover import legacy_relay_plugin_keys
+    from plugin_runtime.relay_policy import legacy_relay_plugin_keys
 
     config = read_raw_config()
     plugins = config.get("plugins")
@@ -564,8 +564,8 @@ def _migrate_to_45(results: dict[str, Any], quiet: bool) -> None:
     # already records `connections` (a decline) or `agent.disabled_toolsets` names it (the
     # resolver subtracts that list last, so the append would have no effect).
     from agent.skill_utils import parse_config_string_list
-    from hermes_cli.tools_config import _configurable_keys, _get_plugin_toolset_keys
-    from hermes_cli.toolset_scope import toolset_allowed_for_platform
+    from tools.platform_policy import configurable_toolset_keys as _configurable_keys, get_plugin_toolset_keys as _get_plugin_toolset_keys
+    from tools.toolset_scope import toolset_allowed_for_platform
 
     config = read_raw_config()
     saved = config.get("platform_toolsets")
@@ -611,7 +611,7 @@ def _migrate_to_46(results: dict[str, Any], quiet: bool) -> None:
     # false` (the key every reader uses) and drop `disabled`, so the editor and runtime agree.
     # `disabled: true` wins over an explicit `enabled: true`: `hermes mcp add` writes that, and the
     # old editor only added `disabled`, so letting `enabled` win would skip nearly every server.
-    from hermes_cli.tools_config import _parse_enabled_flag
+    from hermes_cli.config_toolsets import parse_enabled_flag as _parse_enabled_flag
 
     config = read_raw_config()
     servers = config.get("mcp_servers")

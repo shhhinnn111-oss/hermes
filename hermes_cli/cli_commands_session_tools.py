@@ -273,7 +273,7 @@ class CLICommandsSessionToolsMixin:
         _cp(_accent(_t("tools.disabling" if subcommand == "disable" else "tools.enabling",
                        names=", ".join(names))))
         self._run_tools_config(tools_action=subcommand, names=names, platform="cli")
-        from hermes_cli.tools_config import _get_platform_tools
+        from tools.platform_policy import get_platform_tools as _get_platform_tools
         from hermes_cli.config import load_config
         self.enabled_toolsets = _get_platform_tools(load_config(), "cli")
         self.new_session()
@@ -294,7 +294,7 @@ class CLICommandsSessionToolsMixin:
 
     def _handle_profile_command(self):
         """Display active profile name and home directory."""
-        from hermes_cli.slash_exec import CommandContext, execute_command
+        from commands.execution import CommandContext, execute_command
         reply = execute_command("profile", CommandContext(surface="cli"))
         _say_block(f"  {_t('profile.profile', profile=reply.data['profile'])}",
                    f"  {_t('profile.home', home=reply.data['home'])}")
