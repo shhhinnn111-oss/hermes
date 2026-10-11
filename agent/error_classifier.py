@@ -1087,6 +1087,34 @@ def _status_429(c: _Ctx) -> Verdict:
     return _V_RATE_LIMIT
 
 
+# Explicit exhaustion wording for a 503/529. Narrower than _USAGE_LIMIT_PATTERNS on purpose: a bare
+# "quota" or "limit exceeded" on a 5xx is usually capacity ("concurrency limit exceeded").
+_5XX_QUOTA_WALL_PATTERNS = (
+    "usage_limit_reached", "usage limit", "key limit exceeded", "quota exceeded", "quota_exceeded",
+    "quota exhausted", "exceeded your current quota", "insufficient_quota",
+)
+
+
+def _status_503_529(c: _Ctx) -> Verdict:
+    overflow = _first_match(c.msg, _OVERFLOW_AS_5XX_RULES)
+    if overflow is not None:
+        return overflow
+    if any(p in c.msg for p in _OVERLOADED_PATTERNS):
+        return _V_OVERLOADED
+    # Credential-pooling gateways (e.g. CLIProxyAPI) answer 503 once every upstream credential for the
+    # model is spent: "auth_unavailable: no auth available (...; last upstream error:
+    # usage_limit_reached ...)". Retrying the same model cannot succeed, but our key to the gateway is
+    # healthy (it serves other models), so fall back without benching it, like the aggregator 429 path.
+    if (
+        c.code == "usage_limit_reached" or c.code in _BILLING_ERROR_CODES
+        or any(p in c.msg for p in _5XX_QUOTA_WALL_PATTERNS)
+    ):
+        reset = _rate_limit_reset_seconds(c.msg, c.body, c.headers)
+        ctx = {"reset_at": time.time() + reset} if reset else {}
+        return _v(_R.upstream_rate_limit, should_fallback=True, error_context=ctx)
+    return _V_OVERLOADED
+
+
 def _status_5xx(c: _Ctx) -> Verdict:
     # Request-validation errors as 5xx (codex.nekos.me) fail fast instead of
     # retry-flooding — unless the parameter was injected server-side.
@@ -1228,8 +1256,8 @@ _STATUS_HANDLERS: dict[int, Callable[[_Ctx], Verdict]] = {
     403: _status_403, 404: _status_404, 408: lambda c: _V_TIMEOUT, 413: lambda c: _V_PAYLOAD_TOO_LARGE,
     422: lambda c: _classify_image_tool_422(c),
     429: _status_429, 500: _status_5xx, 502: _status_5xx,
-    503: lambda c: _first_match(c.msg, _OVERFLOW_AS_5XX_RULES) or _V_OVERLOADED,
-    529: lambda c: _first_match(c.msg, _OVERFLOW_AS_5XX_RULES) or _V_OVERLOADED,
+    503: _status_503_529,
+    529: _status_503_529,
 }
 
 
@@ -1252,16 +1280,23 @@ def _has_usage_limit_transient_signal(error_msg: str, body: dict, response_heade
 
 
 def _rate_limit_reset_seconds(error_msg: str, body: dict, response_headers) -> Optional[float]:
-    """Seconds until a 429's window reopens, from the body's reset fields, ``Retry-After`` or the
+    """Seconds until a rate-limit/quota window reopens, from the body's reset fields, ``Retry-After`` or the
     message grammar (``retry after Ns`` / ``resets in 4hr``); None when the response names none."""
+    from agent.credential_pool import _parse_absolute_timestamp
     from agent.retry_utils import parse_retry_after_seconds, reset_delay_from_message
     for payload in (p for p in (body, _error_obj(body)) if isinstance(p, dict)):
         for name in _RESET_FIELDS:
             value = payload.get(name)
             if value in (None, ""):
                 continue
-            if name.endswith("_at") and isinstance(value, (int, float)):
-                return max(0.0, float(value) - time.time())
+            if name.endswith("_at"):
+                # Absolute: epoch seconds/ms or ISO-8601, numeric or string (never a duration), else an
+                # HTTP-date. One already past says nothing about the next window: try the other signals.
+                at = _parse_absolute_timestamp(value)
+                seconds = at - time.time() if at is not None else parse_retry_after_seconds(value)
+                if seconds is not None and seconds > 0:
+                    return seconds
+                continue
             if (seconds := parse_retry_after_seconds(value)) is not None:
                 return seconds
     if (seconds := parse_retry_after_seconds(response_headers)) is not None:

@@ -1902,7 +1902,12 @@ def route_classified_error(
         )
         if not pool_may_recover:
             agent._buffer_diagnostic_status(_eager_fallback_status(classified, _is_upstream, _is_transport_failure))
+            # The classifier also reads body reset fields, Retry-After and the full message, in every
+            # timestamp form: use it whenever the extracted reset is not a valid future one.
+            from agent.fallback_cooldown import _provider_reset_delay
             reset_at = error_context.get("reset_at") if isinstance(error_context, dict) else None
+            if _provider_reset_delay(reset_at) is None:
+                reset_at = (classified.error_context or {}).get("reset_at")
             if agent._try_activate_fallback(reason=classified.reason, reset_at=reset_at):
                 return _fallback_break()
 
