@@ -24,6 +24,38 @@ def test_every_required_binary_maps_to_an_installed_package(pm):
     assert not {"xorg-x11-server-utils", "xorg-x11-utils"} & set(runtime.PACKAGES["dnf"]), "retired on Fedora"
 
 
+def test_dnf_preflight_reports_only_packages_missing_from_enabled_repositories(monkeypatch):
+    """Regression for #136688: dnf availability is checked before the privileged install boundary."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(runtime, "package_manager", lambda: "dnf")
+    available = runtime.PACKAGES["dnf"][1:]
+    calls = []
+    monkeypatch.setattr(runtime.subprocess, "run", lambda command, **kwargs: calls.append((command, kwargs)) or
+                        SimpleNamespace(returncode=0, stdout="\n".join(available), stderr=""))
+
+    preflight = runtime.package_preflight()
+
+    assert preflight == runtime.PackagePreflight(package_manager="dnf", missing=("tigervnc-x11-server",))
+    assert calls == [(["dnf", "repoquery", "--available", "--quiet", "--qf", "%{name}", *runtime.PACKAGES["dnf"]],
+                      {"capture_output": True, "text": True, "timeout": 30, "check": False})]
+
+
+def test_dnf_preflight_keeps_repository_errors_distinct_from_missing_packages(monkeypatch):
+    """A failed repo query is inconclusive, rather than an unsupported-host diagnosis."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(runtime, "package_manager", lambda: "dnf")
+    monkeypatch.setattr(runtime.subprocess, "run", lambda *args, **kwargs:
+                        SimpleNamespace(returncode=1, stdout="", stderr="Cannot download repomd.xml"))
+
+    preflight = runtime.package_preflight()
+
+    assert preflight is not None
+    assert preflight.missing == ()
+    assert preflight.error == "Cannot download repomd.xml"
+
+
 def test_the_image_bakes_the_same_apt_packages_the_runtime_would_install() -> None:
     """The image layer is the only delivery path on a hosted instance, so a package added here but not
     there stalls the screen with no error until someone presses Start."""

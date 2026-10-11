@@ -105,6 +105,13 @@ def install_packages(*, ask_password: Callable[[], str], on_line: Callable[[str]
         cmd = runtime.install_command()
         if cmd is None:
             raise RuntimeError("no supported package manager (apt-get, dnf, pacman) found on this host")
+        preflight = runtime.package_preflight()
+        if preflight is not None:
+            if preflight.missing:
+                raise RuntimeError(runtime.unavailable_packages_message(preflight))
+            if preflight.error:
+                on_line("Bot Desktop: package availability preflight could not complete "
+                        f"({preflight.error}); proceeding because packages were not confirmed unavailable.")
         if key is None:
             key = claim()
         return _run(cmd, ask_password=ask_password, on_line=on_line, timeout_seconds=timeout_seconds)

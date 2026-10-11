@@ -30,6 +30,33 @@ def test_empty_password_cancels_without_spawning(monkeypatch):
     assert any("cancelled" in line for line in lines)
 
 
+def test_confirmed_unavailable_dnf_packages_are_refused_before_spawning(monkeypatch):
+    """Regression for #136688: an Amazon Linux dnf host must not reach sudo for Fedora-only names."""
+    monkeypatch.setattr(runtime, "package_preflight", lambda: runtime.PackagePreflight(
+        package_manager="dnf", missing=("tigervnc-x11-server", "xfce4-panel")))
+    monkeypatch.setattr(install, "_run", lambda *a, **kw: pytest.fail("package manager spawned"))
+
+    with pytest.raises(RuntimeError, match="tigervnc-x11-server, xfce4-panel") as excinfo:
+        install.install_packages(ask_password=lambda: "pw", on_line=lambda _line: None)
+
+    message = str(excinfo.value)
+    assert "No install was started" in message
+    assert "bot-screen" in message
+
+
+def test_dnf_preflight_failure_does_not_claim_packages_are_unavailable(monkeypatch):
+    """Repository, network, or permission failures are inconclusive and preserve the install path."""
+    monkeypatch.setattr(runtime, "package_preflight", lambda: runtime.PackagePreflight(
+        package_manager="dnf", error="repository metadata is unavailable"))
+    calls: list[str] = []
+    monkeypatch.setattr(install, "_run", lambda command, **_kw: calls.append(command) or 0)
+
+    lines: list[str] = []
+    assert install.install_packages(ask_password=lambda: "pw", on_line=lines.append) == 0
+    assert calls == ["sudo apt-get install -y tigervnc-standalone-server"]
+    assert any("could not complete" in line for line in lines)
+
+
 def test_second_install_for_same_profile_is_refused(monkeypatch):
     gate = threading.Event()
     entered = threading.Event()

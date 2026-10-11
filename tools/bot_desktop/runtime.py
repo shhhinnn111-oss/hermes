@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import platform
 import shutil
 import signal
 import subprocess
@@ -89,6 +90,59 @@ def package_manager() -> Optional[str]:
         if shutil.which(pm):
             return "apt" if pm == "apt-get" else pm
     return None
+
+
+@dataclass(frozen=True)
+class PackagePreflight:
+    """What an unprivileged package-availability check established.
+
+    ``error`` is deliberately distinct from ``missing``: a repository, network, or permission
+    failure cannot prove that a package is unavailable and must not turn into a distro verdict.
+    """
+    package_manager: str
+    missing: tuple[str, ...] = ()
+    error: Optional[str] = None
+
+
+def package_preflight() -> Optional[PackagePreflight]:
+    """Check whether dnf can resolve the Bot Desktop packages without invoking sudo.
+
+    The Fedora package list is also selected on other dnf hosts.  ``repoquery`` queries only the
+    enabled repositories, so an empty result is evidence that the privileged transaction would fail.
+    Other package managers retain their existing installation behavior until they gain an equally
+    reliable non-mutating resolver.
+    """
+    pm = package_manager()
+    if pm != "dnf":
+        return None
+    try:
+        result = subprocess.run(
+            ["dnf", "repoquery", "--available", "--quiet", "--qf", "%{name}", *PACKAGES[pm]],
+            capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return PackagePreflight(package_manager=pm, error=str(exc))
+    if result.returncode:
+        detail = (result.stderr or result.stdout).strip().replace("\n", " ")
+        return PackagePreflight(package_manager=pm, error=detail or f"dnf exited {result.returncode}")
+    resolved = set(result.stdout.splitlines())
+    return PackagePreflight(package_manager=pm, missing=tuple(package for package in PACKAGES[pm] if package not in resolved))
+
+
+def unavailable_packages_message(preflight: PackagePreflight) -> str:
+    """Describe confirmed repository absence without calling the host distribution unsupported."""
+    try:
+        release = platform.freedesktop_os_release()
+    except OSError:
+        release = {}
+    host = release.get("PRETTY_NAME") or " ".join(filter(None, (release.get("NAME"), release.get("VERSION_ID"))))
+    host = host or sys.platform
+    missing = ", ".join(preflight.missing)
+    return (
+        f"Bot Desktop packages are unavailable from enabled repositories on {host} ({platform.machine()}) using "
+        f"{preflight.package_manager}: {missing}. No install was started. Ask the administrator to enable a "
+        "repository that provides the documented distro/package requirements, or use the official Hermes "
+        "`-desktop` container option: https://hermes-agent.nousresearch.com/docs/user-guide/features/bot-screen. "
+        "Do not mix Fedora repositories into this host.")
 
 
 def install_command() -> Optional[str]:
