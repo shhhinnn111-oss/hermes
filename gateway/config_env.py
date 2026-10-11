@@ -445,9 +445,9 @@ def _enable_plugin_platforms_from_env(config: GatewayConfig) -> None:
     installable later by ``create_adapter()`` — never here: installing in this sweep boot-looped the app.
     """
     try:
-        from hermes_cli.plugins import discover_plugins
+        from plugin_runtime.lifecycle import discover_plugins
         discover_plugins()  # idempotent
-        from gateway.platform_registry import platform_registry
+        from plugin_runtime.platform_registry import platform_registry
         from gateway.platform_activation import configured_plugin_entries
         # Only platforms with activation evidence (config block, env/.env, credential pool) are
         # imported; an unconfigured adapter has nothing to enable. See gateway.platform_activation.

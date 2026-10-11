@@ -74,7 +74,7 @@ _PROVIDERS: dict[str, tuple[frozenset, Callable[[str], tuple[dict[str, str], str
 
 def _calling_plugin_dir() -> Optional[Path]:
     """Directory of the plugin whose code is nearest on the calling stack, or None."""
-    from hermes_cli.plugins import get_bundled_plugins_dir
+    from plugin_runtime.discovery import get_bundled_plugins_dir
     from hermes_constants import get_default_hermes_root, get_hermes_home, get_process_hermes_home
 
     bases = (get_hermes_home() / "plugins", get_process_hermes_home() / "plugins",

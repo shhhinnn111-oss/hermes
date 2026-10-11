@@ -2,7 +2,7 @@ import threading
 
 import pytest
 
-from hermes_cli import plugins_loader
+from plugin_runtime import loading as plugins_loader
 
 
 def test_nested_plugin_load_runs_inline_on_deadline_worker(monkeypatch):

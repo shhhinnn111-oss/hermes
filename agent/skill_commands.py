@@ -570,8 +570,8 @@ def get_plugin_skill_commands() -> dict[str, dict[str, Any]]:
     config-only disable takes effect without a rescan.
     """
     from agent.skill_utils import get_disabled_skill_names
-    from hermes_cli.plugins import discover_plugins, get_plugin_manager
-    from hermes_cli.plugins_discovery import _get_disabled_plugins
+    from plugin_runtime.lifecycle import discover_plugins, get_plugin_manager
+    from plugin_runtime.discovery import _get_disabled_plugins
     from hermes_constants import get_hermes_home
 
     discover_plugins()  # no-op once this home is discovered
