@@ -1075,6 +1075,7 @@ export function ChatBar({
     busy,
     clearDraft,
     disabled,
+    draftScope: activeQueueSessionKey,
     focusInput,
     insertText,
     maxRecordingSeconds,
