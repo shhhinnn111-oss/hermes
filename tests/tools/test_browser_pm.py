@@ -172,15 +172,18 @@ def test_external_browser_on_path_remains_supported_without_pm(browser_store, mo
     assert not store.exists()
 
 
-def test_historical_warmer_is_inert(monkeypatch):
+@pytest.mark.parametrize("module", [bt, install], ids=["facade", "extraction"])
+def test_historical_warmer_is_inert(monkeypatch, tmp_path, module):
     def forbidden(*args, **kwargs):
         pytest.fail("historical browser warmer must do no work")
 
     monkeypatch.setattr("subprocess.Popen", forbidden)
     monkeypatch.setattr(pm, "ensure", forbidden)
-    from tools import browser_tool
+    cache = tmp_path / "npm-cache"
+    monkeypatch.setenv("npm_config_cache", str(cache))
 
-    assert browser_tool.warm_agent_browser_npx_cache(timeout=0.1) is False
+    assert module.warm_agent_browser_npx_cache(timeout=0.1) is False
+    assert not cache.exists()
 
 
 def test_external_chromium_override_survives_pm_composition(browser_store, monkeypatch, tmp_path):
