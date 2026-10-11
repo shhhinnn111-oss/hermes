@@ -2280,6 +2280,10 @@ export const jaOverrides = {
 
   sidebar: {
     profileRail: 'プロファイルバー',
+    resize: {
+      pinnedBoundary: 'ピン留めとセッションのサイズを変更',
+      sessionsBottom: 'セッションのサイズを変更'
+    },
     markAllRead: 'すべて既読にする',
     filter: {
       grouping: 'グループ化',
