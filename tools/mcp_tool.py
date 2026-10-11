@@ -310,6 +310,7 @@ class MCPServerTask(MCPServerRunMixin, MCPServerTransportMixin, MCPServerHealthM
     keepalive/liveness live in the three mixins."""
 
     __slots__ = (
+        "_auth_park_credentials",
         "_auth_type",
         "_config",
         "_elicitation",
@@ -391,6 +392,9 @@ class MCPServerTask(MCPServerRunMixin, MCPServerTransportMixin, MCPServerHealthM
         # (revoked credentials, dead endpoint) that must not run the job tool-less forever.
         self._park_reason: Optional[str] = None
         self._last_park_line: Optional[str] = None  # last park WARNING text; identical re-parks log at DEBUG
+        # Credential snapshot taken when an OAuth server parks on an auth failure; the unattended
+        # self-probe stays asleep until it differs (None = not an auth park, probe on schedule).
+        self._auth_park_credentials: Optional[tuple] = None
         # Digest of the resolved inputs the transport last connected with; a cross-profile adopter
         # must resolve the same digest in its own scope. None until the transport publishes it.
         self._resolved_identity: Optional[str] = None
