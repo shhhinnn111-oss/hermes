@@ -56,6 +56,7 @@ import {
 } from './app-version'
 import { runAppInstallerChecker } from './appinstaller-checker'
 import { installApplicationMenuAfterFirstWindow } from './application-menu-startup'
+import { startAttachedBackendMonitorLoop } from './attached-backend-monitor'
 import { stopBackendChild as stopBackendChildImpl, waitForBackendExit } from './backend-child'
 import {
   type BackendOutputTail,
@@ -75,7 +76,7 @@ import { BackendDialClaims } from './backend-dial-claim'
 import type { HostBackendRecord } from './backend-discovery'
 import { buildDesktopBackendEnv, pooledProfileBackendEnv, profileBackendParentEnv } from './backend-env'
 import { createBackendExitRecoveryLatch } from './backend-exit-recovery'
-import { isReauthRequiredError, waitForHermesReady } from './backend-health'
+import { isHostResourcePressureError, isReauthRequiredError, waitForHermesReady } from './backend-health'
 import {
   backendCommandMatches,
   type BackendOwnershipEntry,
@@ -216,7 +217,6 @@ import { liveWindowState, overlayWindowState } from './connection-window-state'
 import { describeCrashReason, installCrashForensics } from './crash-forensics'
 import {
   adoptServedDashboardToken,
-  isAttachedBackendTokenDrifted,
   resolveServedDashboardToken
 } from './dashboard-token'
 import { resolveDashboardWebDist } from './dashboard-web-dist'
@@ -12610,13 +12610,12 @@ async function prepareProfileRenameRequest(request) {
 // ── Attach-first: one backend per HOST (multiplex-only) ───────────────────
 // Escape hatch: a dedicated, private backend for this app instead of the host's.
 const ISOLATED_BACKEND = process.env.HERMES_DESKTOP_ISOLATED_BACKEND === '1'
-const ATTACHED_LIVENESS_POLL_MS = 15_000
-let attachedBackendMonitor: NodeJS.Timeout | null = null
+let attachedBackendMonitor: (() => void) | null = null
 let hostSpawnReservation: SpawnReservation | null = null
 
 function stopAttachedBackendMonitor() {
   if (attachedBackendMonitor) {
-    clearInterval(attachedBackendMonitor)
+    attachedBackendMonitor()
     attachedBackendMonitor = null
   }
 }
@@ -12643,23 +12642,17 @@ function stopAttachedBackendMonitor() {
 function startAttachedBackendMonitor(attached: AttachedBackend) {
   stopAttachedBackendMonitor()
 
-  attachedBackendMonitor = setInterval(() => {
-    void waitForHermes(attached.baseUrl, attached.token, undefined, 'token', {})
-      .then(() => resolveServedDashboardToken(attached.baseUrl, attached.token).catch(() => attached.token))
-      .then(servedToken => {
-        if (isAttachedBackendTokenDrifted({ servedToken, adoptedToken: attached.token })) {
-          throw new Error('attached backend is serving a different session token')
-        }
-      })
-      .catch(() => {
-        stopAttachedBackendMonitor()
-        rememberLog(`[attach] attached backend on ${attached.baseUrl} (pid ${attached.pid}) is gone; recovering`)
-        backendConnectionState.invalidate()
-        scheduleUnexpectedPrimaryRecovery({ error: 'The Hermes backend this app attached to exited.', ready: true })
-      })
-  }, ATTACHED_LIVENESS_POLL_MS)
-
-  attachedBackendMonitor.unref?.()
+  attachedBackendMonitor = startAttachedBackendMonitorLoop({
+    adoptedToken: attached.token,
+    probe: () => waitForHermes(attached.baseUrl, attached.token, undefined, 'token', {}, { alreadyBound: true }),
+    readToken: () => resolveServedDashboardToken(attached.baseUrl, attached.token),
+    onGone: () => {
+      stopAttachedBackendMonitor()
+      rememberLog(`[attach] attached backend on ${attached.baseUrl} (pid ${attached.pid}) is gone; recovering`)
+      backendConnectionState.invalidate()
+      scheduleUnexpectedPrimaryRecovery({ error: 'The Hermes backend this app attached to exited.', ready: true })
+    }
+  })
 }
 
 /** Discover and attach to the host's running backend; null means "spawn one". */
@@ -12679,6 +12672,10 @@ function attachToRunningHostBackend(): Promise<AttachedBackend | null> {
       return null
     })
     .catch(error => {
+      if (isHostResourcePressureError(error)) {
+        throw error
+      }
+
       // Discovery must never be able to block boot: fall through to spawning.
       rememberLog(`[attach] host backend discovery failed (${error.message}); spawning our own`)
 

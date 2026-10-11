@@ -16,6 +16,7 @@ import {
   SPAWN_LEDGER_FILENAME,
   spawnOrAttach
 } from './backend-discovery'
+import { isHostResourcePressureError } from './backend-health'
 
 /** A gate held longer than this belongs to a spawner that never finished. */
 export const HOST_SPAWN_GATE_STALE_MS = 60_000
@@ -137,7 +138,17 @@ async function validate(
   unreadableIdentity: 'unconfirmed' | 'token-attach'
 ): Promise<AttachedBackend | null | typeof UNCONFIRMED> {
   const baseUrl = recordBaseUrl(record)
-  const servedToken = nonemptyToken(await deps.resolveServedToken(baseUrl).catch(() => null))
+
+  const servedToken = nonemptyToken(
+    await deps.resolveServedToken(baseUrl).catch(error => {
+      if (isHostResourcePressureError(error)) {
+        throw error
+      }
+
+      return null
+    })
+  )
+
   let publishedToken: string | null = null
 
   if (!servedToken && deps.publishedTokenFor) {
@@ -159,6 +170,10 @@ async function validate(
   try {
     await deps.waitForReady(baseUrl, token)
   } catch (error) {
+    if (isHostResourcePressureError(error)) {
+      throw error
+    }
+
     deps.log(`[attach] ${baseUrl} (pid ${record.pid}) is not ready: ${(error as Error).message}`)
 
     return null
@@ -173,6 +188,10 @@ async function validate(
     try {
       theirs = nonemptyToken(await resolve(baseUrl))
     } catch (error) {
+      if (isHostResourcePressureError(error)) {
+        throw error
+      }
+
       deps.log(
         `[attach] ${baseUrl} (pid ${record.pid}) is ready but its code identity is unreadable: ${(error as Error).message}`
       )
@@ -197,6 +216,7 @@ async function validate(
   }
 
   const wsUrl = wsUrlFor(baseUrl, token)
+
   const probe = await deps.probeWebSocket(wsUrl).catch(error => ({ ok: false, reason: error.message }))
 
   if (!probe.ok) {
