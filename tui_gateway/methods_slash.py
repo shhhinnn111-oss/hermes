@@ -314,7 +314,12 @@ _LIVE_SLASH_OUTPUT = {
     "clear": (None, "Screen clear is terminal-only; desktop/TUI chat left unchanged."),
     "models": (None, "Use /model to view or switch the current model; desktop users can also open the model picker."),
     "rename": (None, "Use /title <name> to rename this session."),
-    "effort": (None, "Use /reasoning <effort> to change reasoning effort.")}
+    "effort": (None, "Use /reasoning <effort> to change reasoning effort."),
+    # The worker owns a throwaway MCP pool and skill cache: reloading there never reached the live session.
+    "reload-mcp": (None, lambda sid, session, arg: _format_live_reload_mcp_output(sid, session, arg)),
+    "reload_mcp": (None, lambda sid, session, arg: _format_live_reload_mcp_output(sid, session, arg)),
+    "reload-skills": (None, lambda sid, session, arg: _format_live_reload_skills_output(sid, session, arg)),
+    "reload_skills": (None, lambda sid, session, arg: _format_live_reload_skills_output(sid, session, arg))}
 
 
 def _live_slash_command_output(sid: str, session: Optional[dict], name: str, arg: str) -> Optional[str]:
@@ -425,11 +430,6 @@ def _mirror_fast(sid, session, agent, arg) -> None:
         _emit("session.info", sid, _session_info(agent, session))
 
 
-def _mirror_reload_mcp(sid, session, agent, arg) -> None:
-    if agent and hasattr(agent, "reload_mcp_tools"):
-        agent.reload_mcp_tools()
-
-
 def _mirror_stop(sid, session, agent, arg) -> None:
     from tools.process_registry import process_registry
     # Deliberate user stop: an explicit source keeps it reaching
@@ -445,7 +445,7 @@ _SLASH_MIRRORS = {
     "compress": lambda sid, session, agent, arg: (
         _compress_live_with_feedback(sid, session, agent, arg, snapshot_kwargs=False) if agent else ""),
     "fast": _mirror_fast,
-    "reload-mcp": _mirror_reload_mcp, "stop": _mirror_stop}
+    "stop": _mirror_stop}
 
 
 def _compute_host_slash(sid: str, session: dict, name: str, command: str) -> tuple[str, str]:

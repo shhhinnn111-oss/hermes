@@ -8,10 +8,12 @@ import { arCommandCenter } from './ar_command_center'
 import { arCommon } from './ar_common'
 import { arConnectors } from './ar_connectors'
 import { arDiagnostics } from './ar_diagnostics'
+import { arMcpReload } from './ar_mcp_reload'
 import { arSettings } from './ar_settings'
 import { defineLocale, type TranslationOverrides } from './define-locale'
 
 export const arOverrides = {
+  connectorsPage: { reload: arMcpReload },
   sharedMetrics: arCommon.sharedMetrics,
   externalOpenFailed: arChrome.externalOpenFailed,
   sessionImport: arConnectors.sessionImport,

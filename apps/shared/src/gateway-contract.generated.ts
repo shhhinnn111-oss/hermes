@@ -4012,9 +4012,10 @@ export type ReloadEnvParams = Record<string, never>
 export interface ReloadEnvResult {
   updated: number
 }
-/** Without ``confirm`` the handler may answer ``confirm_required`` (per ``approvals.mcp_reload_confirm``); ``always`` persists the opt-out; ``rev`` is the config revision the caller wants loaded (coalescing). */
+/** Without ``confirm`` the handler may answer ``confirm_required`` (per ``approvals.mcp_reload_confirm``); ``always`` persists the opt-out; ``rev`` is the config revision the caller wants loaded (coalescing). The reload acts for ``profile`` when given, else the profile of ``session_id``, else the launch profile. */
 export interface ReloadMcpParams {
   session_id?: string | null
+  profile?: string | null
   confirm?: boolean
   always?: boolean
   rev?: string | null
@@ -4023,6 +4024,7 @@ export interface ReloadMcpResult {
   status: ReloadMcpStatus
   message?: string | null
   loaded_rev?: string | null
+  failed?: string[] | null
   coalesced?: boolean | null
   turn_isolation?: boolean | null
   host_ack?: unknown | null
@@ -5340,7 +5342,7 @@ export interface RpcMethods {
   'prompt.submit': { params: PromptSubmitParams; result: PromptSubmitResult }
   /** Re-read ~/.hermes/.env (CLI /reload parity); built agents keep their pool until /new. */
   'reload.env': { params: ReloadEnvParams; result: ReloadEnvResult }
-  /** Tear down and rediscover MCP servers for every live session (prompt cache is invalidated). */
+  /** Tear down and rediscover the calling profile's MCP servers and rebuild its live sessions' tools (prompt cache is invalidated); ``failed`` names the servers that did not connect. */
   'reload.mcp': { params: ReloadMcpParams; result: ReloadMcpResult }
   /** Answer an open server→client request from a client that never received the frame. */
   'request.answer': { params: RequestAnswerParams; result: RequestAnswerResult }

@@ -2,6 +2,7 @@ import { capabilityScoped } from '@/api/client'
 import { addMcpServer, getMcpCatalog, listMcpServers, removeMcpServer } from '@/hermes'
 import { translateNow } from '@/i18n'
 import { completeMcpDesktopOAuth, McpOAuthCancelled } from '@/lib/mcp-dashboard-oauth'
+import { requestMcpReloadWhenIdle } from '@/lib/mcp-reload'
 import { prettyName } from '@/lib/text'
 import { type ComposerSuggestion, registerDraftProvider } from '@/store/composer-suggestions'
 import { $gateway } from '@/store/gateway'
@@ -202,11 +203,13 @@ async function connect(known: SuggestibleServer, sessionId: string | null, cance
     }
 
     // Tools reach the live session before the pill claims success — the
-    // same write-through the Capabilities tab and the setup card use.
-    await $gateway
-      .get()
-      ?.request('reload.mcp', { confirm: true, session_id: sessionId ?? undefined })
-      .catch(() => {})
+    // same write-through the Capabilities tab and the setup card use. A
+    // failed reload does not undo the config write, so report it and carry on.
+    try {
+      await requestMcpReloadWhenIdle($gateway.get(), { confirm: true, profile: oauthScope, sessionId })
+    } catch (error) {
+      notifyError(error, translateNow('settings.mcp.reloadFailed'))
+    }
 
     invalidateMcpSuggestionIndex()
   } catch (error) {

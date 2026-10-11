@@ -422,7 +422,7 @@ class ComputeHost:
         def body(server: Any, sid: str, request_id: Any) -> None:
             resp = server.handle_request({
                 "id": request_id, "method": "reload.mcp",
-                "params": {"session_id": sid, "confirm": True}})
+                "params": {"session_id": sid, "confirm": True, "rev": str(frame.get("rev") or "")}})
             self._reply("reload_mcp.ack", sid, request_id, response=resp)
         self._guarded(frame, "control.error", body)
 

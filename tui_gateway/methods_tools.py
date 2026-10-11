@@ -295,16 +295,6 @@ def _(rid, params: dict, session) -> dict:
     return _ok(rid, registry.kill_process(proc_id))
 
 
-def _mcp_reload_confirm_required() -> bool:
-    """``approvals.mcp_reload_confirm`` from disk config; True (safe) on any failure."""
-    try:
-        cfg = _tools_mod("hermes_cli.config").load_config()
-        approvals = cfg.get("approvals") if isinstance(cfg, dict) else None
-        return bool(approvals.get("mcp_reload_confirm", True)) if isinstance(approvals, dict) else True
-    except Exception:
-        return True
-
-
 def _refresh_live_sessions(home=None, *, preserve_prefix: bool = False, note: str = "") -> None:
     """Rebuild live sessions' cached tool snapshots from the registry and push session.info (agents
     never re-read the registry). The MCP pool is process-global, so refreshing only the requester
@@ -332,9 +322,7 @@ def _refresh_live_sessions(home=None, *, preserve_prefix: bool = False, note: st
                         quiet_mode=True, preserve_prefix=preserve_prefix)
         except Exception as _exc:
             logger.warning("Failed to refresh cached agent tools (session %s): %s", sid, _exc)
-        if note:
-            prior = getattr(agent, "_gateway_turn_context_notes", "") or ""
-            agent._gateway_turn_context_notes = f"{prior}\n\n{note}" if prior else note
+        _queue_turn_note(agent, note)
         _emit("session.info", sid, _session_info(agent, sess))
 
 
@@ -345,83 +333,11 @@ def refresh_plugin_sessions(home, note: str) -> None:
     _refresh_live_sessions(home, preserve_prefix=True, note=note)
 
 
+@_profile_scoped
 @_rpc("reload.mcp", 5015)
 def _(rid, params: dict) -> dict:
-    session = _sessions.get(params.get("session_id", ""))
-    # Prompt-cache invalidation gate: without confirm=true honour ``approvals.mcp_reload_confirm``
-    # (Ink prints ``message`` and re-invokes with confirm=true, or flips the config).
-    if not bool(params.get("confirm", False)) and _mcp_reload_confirm_required():
-        message = (
-            "⚠️  /reload-mcp invalidates the prompt cache (next message re-sends full input tokens). "
-            "Reply `/reload-mcp now` to proceed, or `/reload-mcp always` to proceed and "
-            "silence this prompt permanently.")
-        return _ok(rid, {"status": "confirm_required", "message": message})
-    if session and _session_uses_compute_host(session):
-        try:
-            ack = _get_compute_host_supervisor().reload_mcp(
-                str(params.get("session_id") or ""), request_id=f"reload-mcp-{rid}")
-        except Exception as exc:
-            return _err(rid, 5019, f"compute-host reload_mcp failed: {exc}")
-        return _ok(rid, {"status": "reloaded", "turn_isolation": True, "host_ack": ack})
-    _mcp_agent, _mcp_lifecycle, _mcp_discovery = (
-        _tools_mod("tools.mcp_tool_agent"), _tools_mod("tools.mcp_tool_lifecycle"), _tools_mod("tools.mcp_tool_discovery"))
-    global _mcp_reload_gen, _mcp_reload_loaded_rev
-    # Revision the CALLER wants loaded; empty on legacy clients / manual /reload-mcp
-    # (generation-only coalescing).
-    req_rev = str(params.get("rev") or "")
-
-    def _refresh_session_agent() -> None:
-        """Runs under _mcp_reload_lock so a concurrent reload can't tear the registry down mid-refresh."""
-        _refresh_live_sessions()
-
-    def _do_full_reload() -> None:
-        """shutdown+discover+refresh under the lock, then mark a completed generation. Config
-        can change WHILE discover connects: re-hash and repeat until stable so the marked
-        generation matches what loaded."""
-        global _mcp_reload_gen, _mcp_reload_loaded_rev
-        # The launch profile is a profile too: its servers' connect-time credential reads (stdio
-        # child env, ``${VAR}`` header refs) go through ``get_secret``, which fails closed once this
-        # process multiplexes — an unscoped rediscovery parked every launch-profile stdio server
-        # with UnscopedSecretError while the RPC still answered "reloaded" (#113746).
-        with _session_profile_runtime_scope({"profile_home": None}):
-            loaded = _compute_mcp_rev()
-            for _ in range(_MCP_RELOAD_MAX_PASSES):
-                _mcp_lifecycle.shutdown_mcp_servers()
-                _mcp_agent.reprobe_tool_availability()
-                _mcp_discovery.discover_mcp_tools()
-                after = _compute_mcp_rev()
-                if after == loaded:
-                    break
-                loaded = after
-        # The unscoped shutdown tore down every profile's servers, but discover_mcp_tools() above
-        # only rebuilt the launch profile's overlay; a secondary-profile session refreshed against
-        # that registry would lose its MCP tools until its own reload.
-        with _sessions_lock:
-            homes = {sess.get("profile_home") for sess in _sessions.values() if sess.get("agent") is not None}
-        for home in sorted(homes - {None}):
-            try:
-                with _session_profile_runtime_scope({"profile_home": home}):
-                    _mcp_discovery.discover_mcp_tools()
-            except Exception as _exc:
-                logger.warning("MCP rediscovery failed for profile %s: %s", home, _exc)
-        _refresh_session_agent()
-        _mcp_reload_loaded_rev = loaded
-        _mcp_reload_gen += 1
-
-    # LEADER (won the non-blocking acquire) runs the full reload. FOLLOWER waits, then — still
-    # holding the lock — coalesces only if a reload COMPLETED meanwhile (generation advanced
-    # ⇒ leader didn't throw) AND it loaded the requested revision; otherwise it re-runs.
-    if _mcp_reload_lock.acquire(blocking=False):
-        try:
-            _do_full_reload()
-        finally:
-            _mcp_reload_lock.release()
-        return _finish_reload(rid, params, coalesced=False)
-    gen_before = _mcp_reload_gen
-    with _mcp_reload_lock:
-        coalesced = _mcp_reload_gen > gen_before and (not req_rev or req_rev == _mcp_reload_loaded_rev)
-        _refresh_session_agent() if coalesced else _do_full_reload()
-    return _finish_reload(rid, params, coalesced=coalesced)
+    """The caller's profile only (``methods_reload``)."""
+    return _reload_mcp(rid, params)
 
 
 # ─── Command catalog / dispatch ──────────────────────────────────────────────
@@ -1504,13 +1420,15 @@ def _(rid, params: dict) -> dict:
     return _run_action(rid, params, _SKILLS_ACTIONS, "skills", params.get("query", ""))
 
 
+@_profile_scoped
 @_rpc("skills.reload", 5025)
 def _(rid, params: dict) -> dict:
     # Bound like ``commands.catalog``: an unbound rescan runs against the launch env, reports the session's
     # project skills as "Removed" and republishes a registry without them (#114359).
-    with _session_home_scope(_sessions.get(params.get("session_id", "")), cwd=_completion_cwd(params),
-                             profile=params.get("profile")):
+    session = _sessions.get(params.get("session_id", ""))
+    with _session_home_scope(session, cwd=_completion_cwd(params), profile=params.get("profile")):
         result = _tools_mod("agent.skill_commands").reload_skills()
+    _queue_skills_reload_note(session, result)
     added, removed = result.get("added") or [], result.get("removed") or []
     lines = ["Reloading skills..."] + ([] if added or removed else ["No new skills detected."])
     for label, items in (("Added skills:", added), ("Removed skills:", removed)):

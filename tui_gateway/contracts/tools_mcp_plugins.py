@@ -112,9 +112,11 @@ method("reload.env", params=ReloadEnvParams, result=ReloadEnvResult,
 
 class ReloadMcpParams(Params):
     """Without ``confirm`` the handler may answer ``confirm_required`` (per ``approvals.mcp_reload_confirm``);
-    ``always`` persists the opt-out; ``rev`` is the config revision the caller wants loaded (coalescing)."""
+    ``always`` persists the opt-out; ``rev`` is the config revision the caller wants loaded (coalescing). The reload
+    acts for ``profile`` when given, else the profile of ``session_id``, else the launch profile."""
 
     session_id: str | None = None
+    profile: str | None = None
     confirm: bool = False
     always: bool = False
     rev: str | None = None
@@ -129,13 +131,15 @@ class ReloadMcpResult(Result):
     status: ReloadMcpStatus
     message: str | None = None
     loaded_rev: str | None = None
+    failed: list[str] | None = None
     coalesced: bool | None = None
     turn_isolation: bool | None = None
     host_ack: JsonValue | None = None
 
 
 method("reload.mcp", params=ReloadMcpParams, result=ReloadMcpResult,
-       doc="Tear down and rediscover MCP servers for every live session (prompt cache is invalidated).")
+       doc="Tear down and rediscover the calling profile's MCP servers and rebuild its live sessions' tools "
+           "(prompt cache is invalidated); ``failed`` names the servers that did not connect.")
 
 
 # ── skills ────────────────────────────────────────────────────────────────────────────────────

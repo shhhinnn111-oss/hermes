@@ -6,6 +6,7 @@ import { frBoot } from './fr_boot'
 import { frConnectorAccounts } from './fr_connector_accounts'
 import { frConnectorCard } from './fr_connector_card'
 import { frLocalModels } from './fr_local_models'
+import { frMcpReload } from './fr_mcp_reload'
 import { frModelMenu } from './fr_model_menu'
 import { frNotices } from './fr_notices'
 import { frOnboarding } from './fr_onboarding'
@@ -176,6 +177,7 @@ export const frOverrides = {
     },
 
     accounts: frConnectorAccounts,
+    reload: frMcpReload,
 
     tools: {
       title: 'Outils',
@@ -1212,9 +1214,7 @@ export const frOverrides = {
         maxLines: 'Limite de pagination de fichier',
         maxLineLength: 'Limite de longueur de ligne'
       },
-      codeExecution: {
-        mode: "Mode d'exécution du code"
-      },
+      codeExecution: { mode: "Mode d'exécution du code" },
       approvals: {
         mode: "Mode d'approbation",
         timeout: "Délai d'expiration de l'approbation",

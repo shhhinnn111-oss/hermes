@@ -14,6 +14,7 @@ import type { BillingTranslations } from './types_billing'
 import type { BootTranslations } from './types_boot'
 import type { CatalogInstallTranslations } from './types_catalog_install'
 import type { ConnectorAccountsTranslations, ConnectorCardTranslations } from './types_connectors'
+import type { McpReloadCopy } from './types_mcp_reload'
 import type { ModelMenuTranslations } from './types_model_menu'
 import type { NoticeTranslations } from './types_notices'
 import type { OnboardingTranslations } from './types_onboarding'
@@ -249,6 +250,7 @@ export interface Translations extends NoticeTranslations {
       advancedHint: string
     }
     accounts: ConnectorAccountsTranslations
+    reload: McpReloadCopy
     tools: {
       title: string
       notInstalledBody: string
@@ -1574,9 +1576,7 @@ export interface Translations extends NoticeTranslations {
         paymentAndCredits: string
         usage: string
       }
-      usage: {
-        title: string
-      }
+      usage: { title: string }
       buyCredits: {
         customAmount: string
         title: string

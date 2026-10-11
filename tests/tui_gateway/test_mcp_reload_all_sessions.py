@@ -1,6 +1,7 @@
-"""reload.mcp refreshes the tool snapshot of EVERY live session, not only the requester's.
+"""reload.mcp refreshes the tool snapshot of EVERY live session of the caller's profile, not only the
+requester's (other profiles: test_reload_profile_scope.py).
 
-The MCP pool is process-global while ``agent.tools`` is per-agent: a reload that refreshes only
+The profile's MCP pool is shared by its sessions while ``agent.tools`` is per-agent: a reload that refreshes only
 ``params["session_id"]`` leaves sibling sessions on stale tools (and refreshes nothing at all when
 the id is absent or unknown, while still answering ``reloaded``).
 """
@@ -38,8 +39,8 @@ def reload_env(monkeypatch, tmp_path):
     monkeypatch.setattr(srv, "_compute_mcp_rev", lambda: "rev-a")
     monkeypatch.setattr(srv, "_emit", lambda *_a, **_k: True)
     monkeypatch.setattr(srv, "_session_info", lambda agent, session=None: {})
-    monkeypatch.setattr(srv, "_mcp_reload_gen", 0)
-    monkeypatch.setattr(srv, "_mcp_reload_loaded_rev", "")
+    monkeypatch.setattr(srv, "_mcp_reload_gen", {})
+    monkeypatch.setattr(srv, "_mcp_reload_loaded_rev", {})
 
     def _session(name, profile_home=None):
         return {"agent": SimpleNamespace(name=name), "history": [], "history_lock": threading.RLock(),
@@ -48,7 +49,7 @@ def reload_env(monkeypatch, tmp_path):
     profile_b = tmp_path / "profile-b"
     profile_b.mkdir()
     monkeypatch.setattr(srv, "_sessions", {
-        "A": _session("agent-A"), "B": _session("agent-B", profile_home=str(profile_b)),
+        "A": _session("agent-A"), "A2": _session("agent-A2"), "B": _session("agent-B", profile_home=str(profile_b)),
         "lazy": {"agent": None, "history_lock": threading.RLock()},
     })
     return SimpleNamespace(refreshed=refreshed, discovered_homes=discovered_homes,
@@ -59,24 +60,41 @@ def test_reload_from_one_session_refreshes_every_live_agent(reload_env):
     resp = srv._methods["reload.mcp"](1, {"session_id": "A", "confirm": True})
 
     assert resp["result"]["status"] == "reloaded"
-    assert sorted(reload_env.refreshed) == ["agent-A", "agent-B"]
+    assert sorted(reload_env.refreshed) == ["agent-A", "agent-A2"]
 
 
 def test_reload_without_session_id_still_refreshes_live_agents(reload_env):
     resp = srv._methods["reload.mcp"](1, {"confirm": True})
 
     assert resp["result"]["status"] == "reloaded"
-    assert sorted(reload_env.refreshed) == ["agent-A", "agent-B"]
+    assert sorted(reload_env.refreshed) == ["agent-A", "agent-A2"]
 
 
-def test_reload_rediscovers_under_each_live_profile_scope(reload_env):
-    """The unscoped shutdown tears down every profile's servers; discovery under the ambient home
-    alone would leave a secondary-profile session refreshing against a registry that never
-    regained its overlay, so it loses its MCP tools until its own reload."""
-    srv._methods["reload.mcp"](1, {"session_id": "A", "confirm": True})
+@pytest.mark.parametrize("ack", [
+    {"type": "reload_mcp.ack", "response": {"error": {"code": 5019, "message": "host discovery failed"}}},
+    {"type": "control.error", "message": "host refused reload"},
+    {"type": "reload_mcp.ack", "response": {"result": {"status": "confirm_required"}}},
+])
+def test_compute_host_reload_never_reports_success_for_host_failure(reload_env, monkeypatch, ack):
+    monkeypatch.setattr(srv, "_session_uses_compute_host", lambda _session: True)
+    monkeypatch.setattr(srv, "_get_compute_host_supervisor", lambda: SimpleNamespace(reload_mcp=lambda *_a, **_kw: ack))
 
-    assert hermes_constants.hermes_home_key() in reload_env.discovered_homes
-    assert hermes_constants.hermes_home_key(reload_env.profile_b) in reload_env.discovered_homes
+    resp = srv._methods["reload.mcp"](1, {"session_id": "A", "confirm": True})
+
+    assert "error" in resp
+    assert not reload_env.refreshed
+
+
+def test_compute_host_reload_accepts_only_confirmed_nested_success(reload_env, monkeypatch):
+    ack = {"type": "reload_mcp.ack", "response": {"result": {"status": "reloaded"}}}
+    monkeypatch.setattr(srv, "_session_uses_compute_host", lambda _session: True)
+    monkeypatch.setattr(srv, "_get_compute_host_supervisor", lambda: SimpleNamespace(reload_mcp=lambda *_a, **_kw: ack))
+
+    resp = srv._methods["reload.mcp"](1, {"session_id": "A", "confirm": True})
+
+    assert resp["result"]["status"] == "reloaded"
+    assert resp["result"]["host_ack"] == ack
+    assert not reload_env.refreshed
 
 
 def test_reload_rediscovers_the_launch_profile_under_its_own_secret_scope(reload_env):

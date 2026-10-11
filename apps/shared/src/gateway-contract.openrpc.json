@@ -3014,7 +3014,7 @@
     },
     {
       "name": "reload.mcp",
-      "summary": "Tear down and rediscover MCP servers for every live session (prompt cache is invalidated).",
+      "summary": "Tear down and rediscover the calling profile's MCP servers and rebuild its live sessions' tools (prompt cache is invalidated); ``failed`` names the servers that did not connect.",
       "params": [
         {
           "name": "params",
@@ -27358,7 +27358,7 @@
       },
       "ReloadMcpParams": {
         "additionalProperties": false,
-        "description": "Without ``confirm`` the handler may answer ``confirm_required`` (per ``approvals.mcp_reload_confirm``);\n``always`` persists the opt-out; ``rev`` is the config revision the caller wants loaded (coalescing).",
+        "description": "Without ``confirm`` the handler may answer ``confirm_required`` (per ``approvals.mcp_reload_confirm``);\n``always`` persists the opt-out; ``rev`` is the config revision the caller wants loaded (coalescing). The reload\nacts for ``profile`` when given, else the profile of ``session_id``, else the launch profile.",
         "properties": {
           "session_id": {
             "anyOf": [
@@ -27371,6 +27371,18 @@
             ],
             "default": null,
             "title": "Session Id"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
           },
           "confirm": {
             "default": false,
@@ -27427,6 +27439,21 @@
             ],
             "default": null,
             "title": "Loaded Rev"
+          },
+          "failed": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Failed"
           },
           "coalesced": {
             "anyOf": [

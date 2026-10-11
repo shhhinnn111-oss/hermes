@@ -3516,39 +3516,6 @@ def _session_processes(session: dict) -> list:
     return owned
 
 
-# Serialize reload.mcp (runs on the pool): overlapping shutdown+discover pairs would leave the registry half-built.
-_mcp_reload_lock = threading.Lock()
-# Bumped per SUCCESSFUL reload; a follower skips only if it advanced while it waited (a leader that threw
-# leaves it unchanged → the follower reloads itself).
-_mcp_reload_gen = 0
-# The mcp_rev the last successful reload actually LOADED (re-hashed after discovery); a follower coalesces
-# only when its requested rev matches, otherwise the config changed under the leader.
-_mcp_reload_loaded_rev = ""
-# Bounded convergence for a config edit racing a slow reload: the leader re-hashes until the hash is stable.
-_MCP_RELOAD_MAX_PASSES = 3
-
-
-def _compute_mcp_rev() -> str:
-    """Hash of mcp_servers (definitions — omitting it meant an edited server never bumped the rev) + mcp +
-    tools. ``config.get mtime`` ships it so cosmetic writes don't reload; ``reload.mcp`` coalesces on it. "" = unknown."""
-    with contextlib.suppress(Exception):
-        cfg = _load_cfg()
-        rev_src = json.dumps({k: cfg.get(k) for k in ("mcp", "mcp_servers", "tools")}, sort_keys=True, default=str)
-        return hashlib.sha1(rev_src.encode()).hexdigest()[:12]
-    return ""
-
-
-def _finish_reload(rid, params: dict, *, coalesced: bool) -> dict:
-    """Shared tail for both reload paths: honor ``always`` (persist the confirm opt-out) and return the ok payload."""
-    if bool(params.get("always", False)):
-        try:
-            from cli import save_config_value
-            save_config_value("approvals.mcp_reload_confirm", False)
-        except Exception as _exc:
-            logger.warning("Failed to persist mcp_reload_confirm=false: %s", _exc)
-    return _ok(rid, {"status": "reloaded", "loaded_rev": _mcp_reload_loaded_rev, **({"coalesced": True} if coalesced else {})})
-
-
 _TUI_HIDDEN: frozenset[str] = frozenset({"sethome", "set-home", "commands", "approve", "deny"})
 
 _TUI_EXTRA: list[tuple[str, str, str]] = [
@@ -3675,7 +3642,8 @@ from . import (
     methods_connectors as _methods_connectors, methods_connectors_account as _methods_connectors_account,
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n,
-    methods_shared_metrics as _methods_shared_metrics, methods_start_chat as _methods_start_chat)
+    methods_shared_metrics as _methods_shared_metrics, methods_start_chat as _methods_start_chat,
+    methods_reload as _methods_reload)
 
 for _m in (
     _session_transports, _session_reaper, _session_lifecycle, _session_workdir, _compute_host_bridge, _model_switch,
@@ -3687,6 +3655,6 @@ for _m in (
     _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
     _methods_connectors_account, _methods_display, _methods_display_watch, _methods_onboarding,
-    _methods_i18n, _methods_shared_metrics, _methods_start_chat):
+    _methods_i18n, _methods_shared_metrics, _methods_start_chat, _methods_reload):
     _m.register(sys.modules[__name__])
 del _m

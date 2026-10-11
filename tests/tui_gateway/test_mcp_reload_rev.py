@@ -23,6 +23,7 @@ import threading
 
 import pytest
 
+import hermes_constants
 from tools import mcp_tool
 from tools import mcp_tool_discovery as _mcp_discovery
 from tools import mcp_tool_lifecycle as _mcp_lifecycle
@@ -40,8 +41,8 @@ def reload_env(monkeypatch):
     monkeypatch.setattr(srv, "_compute_mcp_rev", lambda: rev_box["rev"])
 
     saved = (srv._mcp_reload_gen, srv._mcp_reload_loaded_rev)
-    srv._mcp_reload_gen = 0
-    srv._mcp_reload_loaded_rev = ""
+    srv._mcp_reload_gen = {}
+    srv._mcp_reload_loaded_rev = {}
     yield calls, rev_box
     srv._mcp_reload_gen, srv._mcp_reload_loaded_rev = saved
 
@@ -62,7 +63,7 @@ def test_success_reports_loaded_rev(reload_env):
     assert envelope["result"]["status"] == "reloaded"
     assert envelope["result"]["loaded_rev"] == "rev-a"
     assert calls["discover"] == 1
-    assert srv._mcp_reload_gen == 1
+    assert srv._mcp_reload_gen == {hermes_constants.hermes_home_key(): 1}
 
 
 def test_failed_reload_is_an_error_and_no_generation_advance(reload_env, monkeypatch):
@@ -79,8 +80,8 @@ def test_failed_reload_is_an_error_and_no_generation_advance(reload_env, monkeyp
     envelope = _reload(rev="rev-b")
 
     assert "error" in envelope
-    assert srv._mcp_reload_gen == 0
-    assert srv._mcp_reload_loaded_rev == ""
+    assert srv._mcp_reload_gen == {}
+    assert srv._mcp_reload_loaded_rev == {}
 
 
 def test_leader_rehashes_until_stable_when_config_changes_mid_reload(reload_env, monkeypatch):
@@ -99,7 +100,7 @@ def test_leader_rehashes_until_stable_when_config_changes_mid_reload(reload_env,
 
     assert envelope["result"]["loaded_rev"] == "rev-b"
     assert calls["discover"] == 2  # pass 1 read stale config, pass 2 converged
-    assert srv._mcp_reload_gen == 1
+    assert srv._mcp_reload_gen == {hermes_constants.hermes_home_key(): 1}
 
 
 class _WaiterLock:

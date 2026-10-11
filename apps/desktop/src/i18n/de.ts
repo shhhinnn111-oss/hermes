@@ -5,6 +5,7 @@ import { deBoot } from './de_boot'
 import { deConnectorAccounts } from './de_connector_accounts'
 import { deConnectorCard } from './de_connector_card'
 import { deLocalModels } from './de_local_models'
+import { deMcpReload } from './de_mcp_reload'
 import { deModelMenu } from './de_model_menu'
 import { deNotices } from './de_notices'
 import { deOnboarding } from './de_onboarding'
@@ -176,6 +177,7 @@ export const deOverrides = {
     },
 
     accounts: deConnectorAccounts,
+    reload: deMcpReload,
 
     tools: {
       title: 'Tools',
@@ -1208,9 +1210,7 @@ export const deOverrides = {
         maxLines: 'Datei-Seitenlimit',
         maxLineLength: 'Zeilenlängenlimit'
       },
-      codeExecution: {
-        mode: 'Code-Ausführungsmodus'
-      },
+      codeExecution: { mode: 'Code-Ausführungsmodus' },
       approvals: {
         mode: 'Genehmigungsmodus',
         timeout: 'Genehmigungs-Timeout',

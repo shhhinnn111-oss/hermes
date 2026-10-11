@@ -4,6 +4,7 @@ import { defineLocale, type TranslationOverrides } from './define-locale'
 import { introJa } from './intro-ja'
 import { jaAuxTasks } from './ja_aux_tasks'
 import { jaLocalModels } from './ja_local_models'
+import { jaMcpReload } from './ja_mcp_reload'
 import { jaModelMenu } from './ja_model_menu'
 import { jaNotices } from './ja_notices'
 import { jaOnboarding } from './ja_onboarding'
@@ -13,6 +14,7 @@ import { jaSharedMetrics } from './ja_shared_metrics'
 import { jaUpdateChannel } from './ja_update_channel'
 
 export const jaOverrides = {
+  connectorsPage: { reload: jaMcpReload },
   externalOpenFailed: {
     title: 'このリンクを開けませんでした',
     message: 'このアドレスを開くブラウザが登録されていません。リンクをコピーして手動で開いてください。',
@@ -788,9 +790,7 @@ export const jaOverrides = {
         maxLines: 'ファイルページ上限',
         maxLineLength: '行長上限'
       },
-      codeExecution: {
-        mode: 'コード実行モード'
-      },
+      codeExecution: { mode: 'コード実行モード' },
       approvals: {
         mode: '承認モード',
         timeout: '承認タイムアウト',

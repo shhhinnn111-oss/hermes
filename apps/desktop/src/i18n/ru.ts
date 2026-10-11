@@ -2,6 +2,7 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import { defineLocale, type TranslationOverrides } from './define-locale'
 import { ruAuxTasks } from './ru_aux_tasks'
+import { ruMcpReload } from './ru_mcp_reload'
 import { ruModelMenu } from './ru_model_menu'
 import { ruNotices } from './ru_notices'
 import { ruOnboarding } from './ru_onboarding'
@@ -32,6 +33,7 @@ const RU_NOUN = (count: number | string, one: string, few: string, many: string)
 }
 
 export const ruOverrides = {
+  connectorsPage: { reload: ruMcpReload },
   sharedMetrics: ruSharedMetrics,
   sessionImport: {
     title: 'Продолжить из другого приложения',
@@ -769,9 +771,7 @@ export const ruOverrides = {
         maxLines: 'Лимит страниц файла',
         maxLineLength: 'Лимит длины строки'
       },
-      codeExecution: {
-        mode: 'Режим выполнения кода'
-      },
+      codeExecution: { mode: 'Режим выполнения кода' },
       approvals: {
         mode: 'Режим подтверждения',
         timeout: 'Тайм-аут подтверждения',

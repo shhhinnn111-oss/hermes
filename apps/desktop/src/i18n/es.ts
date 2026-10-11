@@ -6,6 +6,7 @@ import { esBoot } from './es_boot'
 import { esConnectorAccounts } from './es_connector_accounts'
 import { esConnectorCard } from './es_connector_card'
 import { esLocalModels } from './es_local_models'
+import { esMcpReload } from './es_mcp_reload'
 import { esModelMenu } from './es_model_menu'
 import { esNotices } from './es_notices'
 import { esOnboarding } from './es_onboarding'
@@ -176,6 +177,7 @@ export const esOverrides = {
     },
 
     accounts: esConnectorAccounts,
+    reload: esMcpReload,
 
     tools: {
       title: 'Herramientas',
@@ -1209,9 +1211,7 @@ export const esOverrides = {
         maxLines: 'Límite de páginas de archivo',
         maxLineLength: 'Límite de longitud de línea'
       },
-      codeExecution: {
-        mode: 'Modo de ejecución de código'
-      },
+      codeExecution: { mode: 'Modo de ejecución de código' },
       approvals: {
         mode: 'Modo de aprobación',
         timeout: 'Tiempo límite de aprobación',
