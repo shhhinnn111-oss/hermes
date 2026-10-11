@@ -37,6 +37,45 @@ def _session_env(env: dict):
     )
 
 
+class TestMatrixOriginChatTypeCapture:
+    """Matrix delivery must retain the adapter-resolved chat type."""
+
+    _BASE = {
+        "HERMES_SESSION_PLATFORM": "matrix",
+        "HERMES_SESSION_CHAT_ID": "!room:example.org",
+        "HERMES_SESSION_USER_ID": "@user:example.org",
+    }
+
+    def test_dm_thread_captures_dm_chat_type(self):
+        env = {**self._BASE, "HERMES_SESSION_CHAT_TYPE": "dm", "HERMES_SESSION_THREAD_ID": "$root"}
+        with _session_env(env):
+            origin = _origin_from_env()
+        assert origin is not None
+        assert origin["chat_type"] == "dm"
+        assert origin["thread_id"] == "$root"
+
+    def test_group_thread_captures_group_chat_type(self):
+        env = {**self._BASE, "HERMES_SESSION_CHAT_TYPE": "group", "HERMES_SESSION_THREAD_ID": "$root"}
+        with _session_env(env):
+            origin = _origin_from_env()
+        assert origin is not None
+        assert origin["chat_type"] == "group"
+
+    def test_dm_without_thread_still_captures_dm_chat_type(self):
+        env = {**self._BASE, "HERMES_SESSION_CHAT_TYPE": "dm"}
+        with _session_env(env):
+            origin = _origin_from_env()
+        assert origin is not None
+        assert origin["chat_type"] == "dm"
+        assert origin["thread_id"] is None
+
+    def test_legacy_missing_chat_type_stays_none(self):
+        with _session_env(self._BASE):
+            origin = _origin_from_env()
+        assert origin is not None
+        assert origin["chat_type"] is None
+
+
 class TestSlackSyntheticThreadCapture:
     def test_synthetic_slack_thread_not_captured(self):
         """thread_id == message_id on Slack = per-message session key: drop it."""

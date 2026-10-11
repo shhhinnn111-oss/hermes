@@ -99,6 +99,8 @@ def _origin_from_env(
     return {
         "platform": origin_platform, "chat_id": origin_chat_id,
         "chat_name": get_session_env("HERMES_SESSION_CHAT_NAME") or None, "thread_id": thread_id,
+        # Preserve the adapter-resolved type so Matrix DM thread seeds use the reply's session lane.
+        "chat_type": get_session_env("HERMES_SESSION_CHAT_TYPE") or None,
         # Lets a delivery mirror resolve the participant's session in per-user-isolated groups.
         "user_id": get_session_env("HERMES_SESSION_USER_ID") or None,
         # Workspace/server scope (Slack team, Discord guild...): Slack session keys embed it,
