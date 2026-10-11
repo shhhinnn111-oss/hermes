@@ -26,6 +26,10 @@ from gateway.status_inline_source import (
     inline_bootstrap_argv,
     inline_source_flag_index,
 )
+from gateway.status_lock_probe import (
+    _is_gateway_runtime_lock_active_strict, _strict_path_exists, classify_unwritable_lock,
+    lock_is_unwritable,
+)
 from hermes_constants import _get_platform_default_hermes_home, get_hermes_home, get_process_hermes_home
 from hermes_cli._subprocess_compat import pid_exists_stdlib
 from utils import atomic_json_write
@@ -909,7 +913,13 @@ def _cleanup_invalid_pid_path(
     if not cleanup_stale:
         return
     _clear_running_pid_cache()
-    for path in (pid_path, _get_gateway_lock_path(pid_path)) if unlink_lock else (pid_path,):
+    lock_path = _get_gateway_lock_path(pid_path)
+    # A provably stale unwritable lock was already removed by is_gateway_runtime_lock_active; one
+    # still here is held, uninspectable or undeletable (#42685), and its gateway.pid may be all
+    # that can later prove it stale: keep both.
+    if unlink_lock and lock_is_unwritable(lock_path):
+        return
+    for path in (pid_path, lock_path) if unlink_lock else (pid_path,):
         with contextlib.suppress(Exception):
             path.unlink(missing_ok=True)
 
@@ -980,19 +990,29 @@ def acquire_gateway_runtime_lock() -> bool:
         return True
     path = _get_gateway_lock_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    replaced_stale = False
     try:
         handle = open(path, "a+", encoding="utf-8")
     except PermissionError:
-        # Stale root-owned lock (launchd session that ran as root): the directory owner can
-        # unlink it; retry once with a fresh file.
+        # Owned by root / another account: replace it only when provably stale, e.g. left by a
+        # launchd session that ran as root (#42685); a held or uninspectable lock stays.
+        if (state := classify_unwritable_lock(path)) != "stale":
+            if state == "unknown":
+                logger.warning(
+                    "Gateway lock %s is owned by another account and cannot be inspected; "
+                    "remove it manually if no gateway is running.", path,
+                )
+            return False
         try:
-            path.unlink()
-            handle = open(path, "a+", encoding="utf-8")
+            path.unlink(missing_ok=True)
+            handle, replaced_stale = open(path, "a+", encoding="utf-8"), True
         except OSError:
             return False
     if not _try_acquire_file_lock(handle):
         handle.close()
         return False
+    if replaced_stale and _pid_from_record(rec := _read_pid_record()) and _live_pid_from_record(rec) is None:
+        _unlink_quietly(_get_pid_path())  # the dead record kept as proof; empty/unreadable: O_EXCL decides
     handle.seek(0)
     handle.truncate()
     json.dump(_build_pid_record(), handle)
@@ -1044,35 +1064,14 @@ def is_gateway_runtime_lock_active(lock_path: Optional[Path] = None) -> bool:
     try:
         handle = open(resolved_lock_path, "a+", encoding="utf-8")
     except PermissionError:
-        # Stale root-owned lock (see acquire_gateway_runtime_lock): report inactive.
+        # Unwritable for us (owned by root / another account). That is also what a LIVE gateway
+        # under another account looks like, so only a provably stale lock is cleaned up (#42685);
+        # a held or uninspectable one is reported active and left alone.
+        if classify_unwritable_lock(resolved_lock_path) != "stale":
+            return True
         _unlink_quietly(resolved_lock_path)
         return False
     return _probe_lock_file(handle)
-
-
-def _strict_path_exists(path: Path, label: str) -> bool:
-    """Like ``path.exists()`` but raises RuntimeError instead of False on EACCES-style errors."""
-    try:
-        path.stat()
-        return True
-    except FileNotFoundError:
-        return False
-    except OSError as exc:
-        raise RuntimeError(f"{label} metadata is not inspectable: {exc}") from exc
-
-
-def _is_gateway_runtime_lock_active_strict(lock_path: Path) -> bool:
-    """Probe ownership without treating access failures as absence."""
-    try:
-        handle = open(lock_path, "r+", encoding="utf-8")
-    except FileNotFoundError:
-        return False
-    except OSError as exc:
-        raise RuntimeError(f"gateway runtime lock is not inspectable: {exc}") from exc
-    try:
-        return _probe_lock_file(handle)
-    except OSError as exc:
-        raise RuntimeError(f"gateway runtime lock probe failed: {exc}") from exc
 
 
 def write_pid_file() -> None:

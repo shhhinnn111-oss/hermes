@@ -1518,6 +1518,7 @@ class TestPermissionErrorOnLockFile:
     """Stale root-owned lock files from launchd Background sessions must not
     crash the gateway on restart (issue #42685)."""
 
+    @pytest.mark.platforms("any")
     def test_permission_error_on_lock_file_returns_false_and_removes(self, tmp_path, monkeypatch):
         """When the lock file is not writable (root-owned), the function should
         remove the stale file and report the lock as inactive."""
@@ -1527,10 +1528,10 @@ class TestPermissionErrorOnLockFile:
 
         real_open = open
 
-        def deny_write(path, *args, **kwargs):
-            if str(path) == str(lock_path):
+        def deny_write(path, mode="r", *args, **kwargs):
+            if str(path) == str(lock_path) and any(flag in mode for flag in "aw+"):
                 raise PermissionError(13, "Permission denied", str(path))
-            return real_open(path, *args, **kwargs)
+            return real_open(path, mode, *args, **kwargs)
 
         monkeypatch.setattr("builtins.open", deny_write)
 
@@ -1538,6 +1539,7 @@ class TestPermissionErrorOnLockFile:
         assert result is False
         assert not lock_path.exists(), "stale root-owned lock file should be removed"
 
+    @pytest.mark.platforms("any")
     def test_permission_error_unlink_failure_still_returns_false(self, tmp_path, monkeypatch):
         """Even if unlinking the stale lock file fails (e.g. directory not writable),
         the function should still return False to allow startup."""
@@ -1547,10 +1549,10 @@ class TestPermissionErrorOnLockFile:
 
         real_open = open
 
-        def deny_write(path, *args, **kwargs):
-            if str(path) == str(lock_path):
+        def deny_write(path, mode="r", *args, **kwargs):
+            if str(path) == str(lock_path) and any(flag in mode for flag in "aw+"):
                 raise PermissionError(13, "Permission denied", str(path))
-            return real_open(path, *args, **kwargs)
+            return real_open(path, mode, *args, **kwargs)
 
         real_unlink = Path.unlink
 
@@ -1565,6 +1567,7 @@ class TestPermissionErrorOnLockFile:
         result = status.is_gateway_runtime_lock_active(lock_path)
         assert result is False
 
+    @pytest.mark.platforms("any")
     def test_acquire_gateway_runtime_lock_recovers_from_permission_error(self, tmp_path, monkeypatch):
         """acquire_gateway_runtime_lock must survive a stale root-owned lock
         file: unlink it and retry with a fresh file instead of crashing."""
@@ -1575,17 +1578,18 @@ class TestPermissionErrorOnLockFile:
 
         real_open = open
 
-        def deny_write(path, *args, **kwargs):
-            # Simulate a root-owned file: opening fails while the ORIGINAL
-            # stale file is still on disk; after unlink, the fresh file the
+        def deny_write(path, mode="r", *args, **kwargs):
+            # Simulate a root-owned 0644 file: opening it for writing fails while the
+            # ORIGINAL stale file is still on disk; after unlink, the fresh file the
             # retry creates opens fine.
             if (
                 str(path) == str(lock_path)
+                and any(flag in mode for flag in "aw+")
                 and lock_path.exists()
                 and lock_path.read_text(encoding="utf-8") == "stale"
             ):
                 raise PermissionError(13, "Permission denied", str(path))
-            return real_open(path, *args, **kwargs)
+            return real_open(path, mode, *args, **kwargs)
 
         monkeypatch.setattr("builtins.open", deny_write)
 
