@@ -501,6 +501,7 @@ export interface Translations extends NoticeTranslations {
       openMaintenance: string
     }
     voice: {
+      echoDropped: string
       configureSpeechToText: string
       couldNotStartSession: string
       microphoneAccessDenied: string
