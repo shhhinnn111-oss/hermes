@@ -8294,6 +8294,18 @@
             ],
             "default": null,
             "title": "Status"
+          },
+          "queued": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Queued"
           }
         },
         "required": [
@@ -34732,6 +34744,18 @@
             ],
             "default": null,
             "title": "Status"
+          },
+          "queued": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Queued"
           }
         },
         "title": "SlashExecResult",
