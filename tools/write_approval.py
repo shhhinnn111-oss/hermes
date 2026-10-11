@@ -117,7 +117,7 @@ def get_pending(subsystem: str, pending_id: str) -> Optional[dict[str, Any]]:
         return None
 
 
-def payload_sha256(payload: Dict[str, Any]) -> str:
+def payload_sha256(payload: dict[str, Any]) -> str:
     """Digest the reviewed payload without changing the pending-record format."""
     encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -135,7 +135,7 @@ class ConsumeResult:
     applied: bool
     consumed: bool
     message: str
-    result: Dict[str, Any]
+    result: dict[str, Any]
 
 
 @contextmanager
