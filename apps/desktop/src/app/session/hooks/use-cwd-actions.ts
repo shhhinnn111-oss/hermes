@@ -1,6 +1,6 @@
 import { type MutableRefObject, useCallback } from 'react'
 
-import { useI18n } from '@/i18n'
+import { translateNow, useI18n } from '@/i18n'
 import { notify, notifyError } from '@/store/notifications'
 import {
   $currentCwd,
@@ -107,7 +107,9 @@ export function useCwdActions({ activeSessionIdRef, onSessionRuntimeInfo, reques
         const message = err instanceof Error ? err.message : String(err)
 
         if (!message.includes('unknown method')) {
-          notifyError(err, copy.cwdChangeFailed)
+          // The shared owner refuses a re-home while a turn runs (its frozen policy would change under it).
+          const busy = (err as { data?: { reason?: string } })?.data?.reason === 'session_busy'
+          notifyError(busy ? new Error(translateNow('sidebar.projects.moveBusy')) : err, copy.cwdChangeFailed)
 
           return
         }
