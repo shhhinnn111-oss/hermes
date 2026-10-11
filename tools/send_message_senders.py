@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 
 from agent.redact import redact_sensitive_text
 
@@ -105,26 +106,25 @@ def _is_telegram_thread_not_found(error: Exception) -> bool:
     return "thread not found" in str(error).lower()
 
 
+def _telegram_album_paths(media_files, force_document):
+    """Paths to send as native albums: two or more existing photos and nothing else, else ``[]``.
+    Mixed media and force-document batches stay on the per-file path."""
+    paths = [path for path, is_voice in media_files
+             if not is_voice and os.path.splitext(path)[1].lower() in _IMAGE_EXTS and os.path.exists(path)]
+    return paths if not force_document and len(paths) >= 2 and len(paths) == len(media_files) else []
+
+
 async def _send_telegram_photo_album(bot, chat_id, image_paths, media_kwargs):
     """Send one Telegram photo album and verify the returned receipt group."""
     from telegram import InputFile, InputMediaPhoto
 
-    with contextlib.ExitStack() as stack:
-        media = [
-            InputMediaPhoto(
-                media=InputFile(
-                    stack.enter_context(open(path, "rb")),
-                    filename=os.path.basename(path),
-                    attach=True,
-                )
-            )
-            for path in image_paths
-        ]
-        receipts = await bot.send_media_group(
-            chat_id=chat_id,
-            media=media,
-            **media_kwargs,
-        )
+    # InputFile reads a file handle whole when it is built; read the bytes off the event loop.
+    media = [
+        InputMediaPhoto(media=InputFile(await asyncio.to_thread(Path(path).read_bytes),
+                                        filename=os.path.basename(path), attach=True))
+        for path in image_paths
+    ]
+    receipts = await bot.send_media_group(chat_id=chat_id, media=media, **media_kwargs)
 
     receipts = list(receipts or [])
     if len(receipts) != len(image_paths):
@@ -318,26 +318,13 @@ async def _send_telegram(token, chat_id, message, media_files=None, thread_id=No
         for chunk in BasePlatformAdapter.truncate_message(formatted, 4096, len_fn=utf16_len) if formatted.strip() else ():
             last_msg = await _telegram_send_text_chunk(bot, int_chat_id, chunk, send_parse_mode, _has_html, text_kwargs)
         # Telegram renders two or more photos as a native album only when they
-        # are sent through sendMediaGroup. Keep mixed-media and force-document
-        # payloads on the established per-file path below; only homogeneous,
-        # existing photo batches are eligible. Bot API albums are capped at
-        # ten items, so larger batches are chunked without silently degrading
-        # to individual sendPhoto calls.
-        _album_paths = [
-            media_path
-            for media_path, is_voice in media_files
-            if (
-                not is_voice
-                and os.path.exists(media_path)
-                and os.path.splitext(media_path)[1].lower() in _IMAGE_EXTS
-            )
-        ]
-        _send_as_albums = (
-            not force_document
-            and len(_album_paths) >= 2
-            and len(_album_paths) == len(media_files)
-        )
-        if _send_as_albums:
+        # are sent through sendMediaGroup. Bot API albums are capped at ten
+        # items, so larger batches are chunked without silently degrading to
+        # individual sendPhoto calls. Text never rides an album: with several
+        # files it went out above as its own message (_media_caption_split).
+        _album_paths = await asyncio.to_thread(_telegram_album_paths, media_files, force_document)
+        if _album_paths:
+            delivered = 0
             try:
                 for start in range(0, len(_album_paths), 10):
                     chunk = _album_paths[start:start + 10]
@@ -362,11 +349,13 @@ async def _send_telegram(token, chat_id, message, media_files=None, thread_id=No
                             )
                         else:
                             raise
+                    delivered += len(chunk)
             except Exception as e:
-                warning = _sanitize_error_text(
-                    f"Failed to send Telegram photo album: {e}"
-                )
-                logger.error(warning)
+                # Every album failure becomes this error result; earlier chunks already landed, so
+                # say how many, letting a caller that retries avoid resending them.
+                sent = f" after {delivered} of {len(_album_paths)} photos were delivered" if delivered else ""
+                warning = _sanitize_error_text(f"Failed to send Telegram photo album{sent}: {e}")
+                logger.error(warning, exc_info=True)
                 warnings.append(warning)
                 return {"error": warning, "warnings": warnings}
             # An intended album must never fall back to individual photos: that

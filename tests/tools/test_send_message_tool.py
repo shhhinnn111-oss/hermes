@@ -521,6 +521,31 @@ class TestSendTelegramMediaDelivery:
         assert [len(call.kwargs["media"]) for call in bot.send_media_group.await_args_list] == [10, 2]
         bot.send_photo.assert_not_awaited()
 
+    def test_album_failure_after_a_delivered_chunk_reports_the_delivered_count(self, tmp_path, monkeypatch):
+        paths = []
+        for index in range(12):
+            path = tmp_path / f"photo-{index}.png"
+            path.write_bytes(b"image")
+            paths.append(path)
+
+        bot = MagicMock()
+        bot.send_message = AsyncMock()
+        bot.send_photo = AsyncMock()
+        bot.send_media_group = AsyncMock(side_effect=[
+            [SimpleNamespace(message_id=index, media_group_id="group-a") for index in range(10)],
+            RuntimeError("Bad Request: wrong file"),
+        ])
+        _install_telegram_mock(monkeypatch, bot)
+
+        result = asyncio.run(_send_telegram(
+            "token", "12345", "", media_files=[(str(p), False) for p in paths]
+        ))
+
+        # The first album landed: the error says so, and nothing falls back to sendPhoto.
+        assert "after 10 of 12 photos were delivered" in result["error"]
+        assert "wrong file" in result["error"]
+        bot.send_photo.assert_not_awaited()
+
     def test_mixed_media_preserves_individual_send_path(self, tmp_path, monkeypatch):
         photo = tmp_path / "photo.png"
         document = tmp_path / "notes.pdf"
