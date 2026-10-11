@@ -267,7 +267,8 @@ def release_setup_copy(copy_dir: Path, *, setup_state: Optional[dict]) -> None:
     (the user's own disabled toolsets stay) and its deferred-tool list."""
     (copy_dir / profiles_mod.SETUP_PROFILE_MARKER).unlink(missing_ok=True)
     config_path = copy_dir / "config.yaml"
-    if setup_state is None or not config_path.is_file():
+    from hermes_cli.config_backend import config_exists
+    if setup_state is None or not config_exists(config_path):
         return
     from agent.skill_utils import parse_config_string_list
     from hermes_cli.config import atomic_config_replace, read_user_config_raw
